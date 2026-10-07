@@ -13,33 +13,6 @@ export default function Decode() {
     const fileInputRef = useRef(null);
     const apiUrl = "http://localhost:8000";
 
-    // Sample fallback test data
-    const loadSampleData = () => {
-        setIsScanning(true);
-        setError("");
-        setTimeout(() => {
-            setScanResult({
-                timestamp: new Date().toLocaleTimeString(),
-                imageName: "sample_clue_board.png",
-                aruco: {
-                    detected: true,
-                    id: "42",
-                    size: "24 cm",
-                    dictionary: "DICT_4X4_50",
-                    rawIds: [42],
-                    status: "Detected"
-                },
-                qrCode: {
-                    detected: true,
-                    text: "https://meetai.org/session/verify-token-alpha982",
-                    type: "URL Link",
-                    status: "Decoded"
-                }
-            });
-            setIsScanning(false);
-        }, 500);
-    };
-
     const handleFile = (file) => {
         if (!file || !file.type.startsWith("image/")) return;
         
@@ -47,7 +20,7 @@ export default function Decode() {
         const reader = new FileReader();
         reader.onload = (e) => {
             setImagePreview(e.target.result);
-            processImageScan(file, file.name);
+            processImageScan(file);
         };
         reader.readAsDataURL(file);
     };
@@ -86,10 +59,9 @@ export default function Decode() {
         }
     };
 
-    const processImageScan = async (fileObj, fileName) => {
-        const targetFile = fileObj || selectedImage;
+    const processImageScan = async (fileObj) => {
+        const targetFile = fileObj;
         if (!targetFile) return;
-        const targetName = fileName || targetFile.name;
 
         const formData = new FormData();
         formData.append("file", targetFile);
@@ -109,53 +81,33 @@ export default function Decode() {
             }
 
             const data = await response.json();
-
+            console.log(data);
+            console.log(data.aruco_ids);
+            console.log(data.qr_data);
             setScanResult({
-                timestamp: new Date().toLocaleTimeString(),
-                imageName: targetName,
-                aruco: {
-                    detected: !!data.aruco_detected,
-                    id: data.aruco_detected && data.aruco_ids && data.aruco_ids.length > 0 ? data.aruco_ids.join(", ") : "None",
-                    size: data.aruco_detected ? "24 cm" : "—",
-                    dictionary: "DICT_4X4_50",
-                    rawIds: data.aruco_ids || [],
-                    status: data.aruco_detected ? "Detected" : "Not Found"
-                },
-                qrCode: {
-                    detected: !!data.qr_detected,
-                    text: data.qr_data || "No QR Code payload found in image",
-                    type: data.qr_detected ? (data.qr_data?.startsWith("http") ? "URL Link" : "Single-line Text") : "—",
-                    status: data.qr_detected ? "Decoded" : "Not Found"
-                }
+                isArucoDetected:data.aruco_detected,
+                isQrDetected:data.qr_detected,
+                arucoDetected: data.aruco_ids,
+                qrDetected: data.qr_data,
             });
+            console.log(scanResult,"scanned result");
         } catch (err) {
-            console.error("Backend scan failed:", err);
-            setError(err.message || "Failed to connect to backend /scan-clue endpoint at http://localhost:8000.");
+            console.error(" scan failed:", err);
+            setError(err.message || "fail to scan");
         } finally {
             setIsScanning(false);
         }
-    };
-
-    const copyText = (text, key) => {
-        navigator.clipboard.writeText(text);
-        setCopiedKey(key);
-        setTimeout(() => setCopiedKey(null), 2000);
     };
 
     return (
         <div className="decode-container">
             {/* Header Section */}
             <div className="decode-header">
-                <div className="header-badge-tag">
-                    <span className="dot" />
-                    Dual Vision Scanner
-                </div>
                 <h2>
                     QR Code & <span>ArUco Marker</span> Scanner
                 </h2>
                 <p>
-                    Upload a single image containing both a QR code and an ArUco marker. 
-                    The OpenCV vision backend processes the image, extracts the ArUco ID with 24 cm scale calibration, and decodes the QR code text.
+                    Upload an image containing both a QR code and an ArUco marker to extract the marker ID
                 </p>
             </div>
 
@@ -181,34 +133,22 @@ export default function Decode() {
                     {!imagePreview ? (
                         <div className="dropzone-empty-content">
                             <div className="dual-scan-icon-bubble">
-                                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <rect x="3" y="3" width="7" height="7" />
                                     <rect x="14" y="3" width="7" height="7" />
                                     <rect x="14" y="14" width="7" height="7" />
                                     <rect x="3" y="14" width="7" height="7" />
                                 </svg>
                             </div>
-                            <h3>Upload image with QR & ArUco</h3>
+                            <h3>Upload image to scan</h3>
                             <p>
                                 Drag and drop your image file here, or <span>browse from device</span>
                             </p>
-                            <div className="preset-sample-link" onClick={(e) => { e.stopPropagation(); loadSampleData(); }}>
-                                Or try sample test scanner data →
-                            </div>
                         </div>
                     ) : (
                         <div className="preview-content-box" onClick={(e) => e.stopPropagation()}>
                             <div className="image-preview-wrapper">
                                 <img src={imagePreview} alt="Target upload" className="target-image" />
-                                <div className="scanning-overlay-grid">
-                                    <div className="scan-line" />
-                                    <div className="aruco-bounding-box" title="ArUco Marker Detected">
-                                        <span className="box-tag">ArUco #24cm</span>
-                                    </div>
-                                    <div className="qr-bounding-box" title="QR Code Detected">
-                                        <span className="box-tag">QR Code</span>
-                                    </div>
-                                </div>
                             </div>
                             <div className="preview-toolbar">
                                 <span className="preview-filename">{selectedImage?.name || "Uploaded Image"}</span>
@@ -228,7 +168,7 @@ export default function Decode() {
                 {isScanning && (
                     <div className="scanning-status-bar">
                         <div className="pulse-spinner" />
-                        <span>Sending to OpenCV backend: Detecting ArUco markers (24 cm scale) and decoding QR payload...</span>
+                        <span>Processing image on backend</span>
                     </div>
                 )}
 
@@ -244,7 +184,7 @@ export default function Decode() {
                 )}
             </div>
 
-            {/* Response Section at Bottom */}
+            {/* Response Section at Bottom (Only outputs from backend) */}
             {scanResult && (
                 <div className="scan-results-container">
                     <div className="results-header-bar">
@@ -253,7 +193,7 @@ export default function Decode() {
                             <div>
                                 <h3>Backend Detection Results</h3>
                                 <p className="results-meta">
-                                    Target: <strong>{scanResult.imageName}</strong> • Scanned at {scanResult.timestamp}
+                                    Scanned image: <strong>{scanResult.imageName}</strong> at {scanResult.timestamp}
                                 </p>
                             </div>
                         </div>
@@ -262,12 +202,12 @@ export default function Decode() {
                             className="btn-rescan"
                             onClick={() => processImageScan(selectedImage, scanResult.imageName)}
                         >
-                            Re-scan Image
+                            Re-scan
                         </button>
                     </div>
 
                     <div className="results-dual-grid">
-                        {/* 1. ARUCO MARKER CARD */}
+                        {/* 1. ARUCO MARKER OUTPUT */}
                         <div className="result-card aruco-card">
                             <div className="result-card-header">
                                 <div className="card-badge aruco-badge">
@@ -277,51 +217,17 @@ export default function Decode() {
                                     </svg>
                                     ArUco Marker
                                 </div>
-                                <span className={`status-chip ${scanResult.aruco.detected ? 'success' : 'warning'}`}>
-                                    {scanResult.aruco.status}
+                                <span className={`status-chip ${scanResult.arucoDetected ? 'success' : 'warning'}`}>
+                                    {scanResult.isArucoDetected ? 'Detected' : 'Not Found'}
                                 </span>
                             </div>
-
                             <div className="result-card-body">
-                                <div className="primary-stat-row">
-                                    <div className="stat-box">
-                                        <span className="stat-label">ArUco ID</span>
-                                        <span className="stat-value-highlight">
-                                            {scanResult.aruco.detected ? `#${scanResult.aruco.id}` : "None"}
-                                        </span>
-                                    </div>
-                                    <div className="stat-box">
-                                        <span className="stat-label">Marker Size</span>
-                                        <span className="stat-value-highlight size-badge">
-                                            {scanResult.aruco.size}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="info-detail-list">
-                                    <div className="info-detail-row">
-                                        <span className="detail-key">Dictionary:</span>
-                                        <span className="detail-val font-mono">{scanResult.aruco.dictionary}</span>
-                                    </div>
-                                    <div className="info-detail-row">
-                                        <span className="detail-key">Detected IDs Count:</span>
-                                        <span className="detail-val font-mono">{scanResult.aruco.rawIds.length}</span>
-                                    </div>
-                                </div>
+                                {scanResult.arucoDetected}
                             </div>
 
-                            <div className="result-card-footer">
-                                <button
-                                    className="btn-card-action"
-                                    disabled={!scanResult.aruco.detected}
-                                    onClick={() => copyText(`ArUco ID: ${scanResult.aruco.id} | Size: ${scanResult.aruco.size}`, 'aruco')}
-                                >
-                                    {copiedKey === 'aruco' ? "✓ ArUco Info Copied" : "Copy ArUco Data"}
-                                </button>
-                            </div>
                         </div>
 
-                        {/* 2. QR CODE CARD */}
+                        {/* 2. QR CODE OUTPUT */}
                         <div className="result-card qr-card">
                             <div className="result-card-header">
                                 <div className="card-badge qr-badge">
@@ -333,39 +239,18 @@ export default function Decode() {
                                     </svg>
                                     QR Code
                                 </div>
-                                <span className={`status-chip ${scanResult.qrCode.detected ? 'success' : 'warning'}`}>
-                                    {scanResult.qrCode.status}
+                                <span className={`status-chip ${scanResult.qrDetected ? 'success' : 'warning'}`}>
+                                    {scanResult.isQrDetected ? "Detected" : "Not Found"}
                                 </span>
                             </div>
 
                             <div className="result-card-body">
                                 <div className="qr-text-container">
-                                    <span className="stat-label">Decoded One-Line Text:</span>
+                                    <span className="stat-label">Decoded QR Text:</span>
                                     <div className="qr-text-box">
-                                        <span className="one-line-qr-text">{scanResult.qrCode.text}</span>
+                                        <span className="one-line-qr-text">{scanResult.qrDetected}</span>
                                     </div>
                                 </div>
-
-                                <div className="info-detail-list">
-                                    <div className="info-detail-row">
-                                        <span className="detail-key">Payload Type:</span>
-                                        <span className="detail-val">{scanResult.qrCode.type}</span>
-                                    </div>
-                                    <div className="info-detail-row">
-                                        <span className="detail-key">Detection Status:</span>
-                                        <span className="detail-val">{scanResult.qrCode.detected ? "Payload Extracted" : "No QR found"}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="result-card-footer">
-                                <button
-                                    className="btn-card-action primary-action"
-                                    disabled={!scanResult.qrCode.detected}
-                                    onClick={() => copyText(scanResult.qrCode.text, 'qr')}
-                                >
-                                    {copiedKey === 'qr' ? "✓ Decoded Text Copied" : "Copy QR Text"}
-                                </button>
                             </div>
                         </div>
                     </div>
