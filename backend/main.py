@@ -1,4 +1,5 @@
 import os
+from bson import ObjectId
 from fastapi.staticfiles import StaticFiles
 from schemas import UserRegister, UserLogin, UserResponse, TranscriptRefineRequest, DocumentationRequest
 import jwt 
@@ -12,6 +13,7 @@ from refinement import refine_transcript
 from documentation import generate_documentation
 from utils import save_uploaded_file
 from vision import scan_clue_board
+
 
 
 SECRET_KEY = "6UkPR5eI6OY3jDzLijp+t6EnYRXnh0EBLCjVNkiZmhk="
@@ -119,13 +121,16 @@ async def document_meeting_endpoint(req: DocumentationRequest):
             "decisions": meeting_record.decisions,
             "action_items": [item.dict() for item in meeting_record.action_items],
             "minutes": meeting_record.minutes,
+            "raw_transcript": req.raw_transcript or "",
             "refined_transcript": req.refined_transcript,
             "created_at": datetime.utcnow().isoformat(),
             "formatted_date": datetime.utcnow().strftime("%b %d, %Y • %I:%M %p")
         }
-        await meetings_collection.insert_one(meeting_doc)
+        insert_result = await meetings_collection.insert_one(meeting_doc)
+        meeting_id = str(insert_result.inserted_id)
 
         return {
+            "meeting_id": meeting_id,
             "meeting_record": meeting_record
         }
     except Exception as e:
@@ -212,8 +217,55 @@ async def get_dashboard_stats():
 
 
 
+@app.get("/meetings")
+async def list_all_meetings():
+    try:
+        cursor = meetings_collection.find().sort("created_at", -1)
+        meetings = await cursor.to_list(length=100)
+        return [
+            {
+                "id": str(m["_id"]),
+                "title": m.get("title", "Meeting Overview"),
+                "summary": m.get("summary", ""),
+                "decisions_count": len(m.get("decisions", [])),
+                "action_items_count": len(m.get("action_items", [])),
+                "formatted_date": m.get("formatted_date", "Recently"),
+                "created_at": m.get("created_at", "")
+            }
+            for m in meetings
+        ]
+    except Exception as e:
+        return []
+
+
+@app.get("/meetings/{meeting_id}")
+async def get_meeting_by_id(meeting_id: str):
+    try:
+        meeting = await meetings_collection.find_one({"_id": ObjectId(meeting_id)})
+        if not meeting:
+            raise HTTPException(status_code=404, detail="Meeting not found.")
+        
+        return {
+            "id": str(meeting["_id"]),
+            "title": meeting.get("title", ""),
+            "summary": meeting.get("summary", ""),
+            "decisions": meeting.get("decisions", []),
+            "action_items": meeting.get("action_items", []),
+            "minutes": meeting.get("minutes", []),
+            "raw_transcript": meeting.get("raw_transcript", ""),
+            "refined_transcript": meeting.get("refined_transcript", ""),
+            "formatted_date": meeting.get("formatted_date", ""),
+            "created_at": meeting.get("created_at", "")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid meeting ID or error: {str(e)}")
+
+
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
+
 
 
     if not file.filename:
@@ -237,6 +289,22 @@ async def process_audio(file: UploadFile = File(...)):
 
     try:
         result = process_meeting(audio_path)
+        meeting_record = result.get("meeting_record")
+        if meeting_record:
+            meeting_doc = {
+                "title": (meeting_record.summary[:55] + "...") if len(meeting_record.summary) > 55 else meeting_record.summary,
+                "summary": meeting_record.summary,
+                "decisions": meeting_record.decisions,
+                "action_items": [item.dict() for item in meeting_record.action_items],
+                "minutes": meeting_record.minutes,
+                "raw_transcript": result.get("raw_transcript", ""),
+                "refined_transcript": result.get("refined_transcript", ""),
+                "created_at": datetime.utcnow().isoformat(),
+                "formatted_date": datetime.utcnow().strftime("%b %d, %Y • %I:%M %p")
+            }
+            insert_res = await meetings_collection.insert_one(meeting_doc)
+            result["meeting_id"] = str(insert_res.inserted_id)
+
         return result
 
     except Exception as e:

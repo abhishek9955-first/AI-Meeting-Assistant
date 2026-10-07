@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import "./Meeting.css";
 import { useNavigate } from "react-router-dom";
 
-export default function Meeting() {
+export default function Meeting({ initialMeeting, onClearSelected }) {
     const [tab, setTab] = useState("input"); // "input" | "transcripts" | "minutes"
     const [selectedFile, setSelectedFile] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -26,6 +26,22 @@ export default function Meeting() {
     const fileInputRef = useRef(null);
     const apiUrl = "http://localhost:8000";
     const navigate = useNavigate();
+
+    // Load initial meeting if opened from Dashboard
+    useEffect(() => {
+        if (initialMeeting) {
+            setRawTranscript(initialMeeting.raw_transcript || "");
+            setRefinedTranscript(initialMeeting.refined_transcript || "");
+            setMeetingRecord({
+                summary: initialMeeting.summary || "",
+                decisions: initialMeeting.decisions || [],
+                action_items: initialMeeting.action_items || [],
+                minutes: initialMeeting.minutes || []
+            });
+            setTab("minutes");
+        }
+    }, [initialMeeting]);
+
 
     const acceptedFormats = [
         { label: "MP3", ext: "audio/mpeg" },
@@ -186,7 +202,8 @@ export default function Meeting() {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    refined_transcript: textToDocument.trim()
+                    refined_transcript: textToDocument.trim(),
+                    raw_transcript: rawTranscript.trim()
                 })
             });
 
@@ -308,10 +325,14 @@ export default function Meeting() {
         setError("");
         setCompletedTasks({});
         setTab("input");
+        if (onClearSelected) {
+            onClearSelected();
+        }
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
     };
+
 
     return (
         <div className="meeting-container">
