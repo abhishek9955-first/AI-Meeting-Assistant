@@ -37,4 +37,6 @@ class TranscriptRefineRequest(BaseModel):
 
 class DocumentationRequest(BaseModel):
     refined_transcript: str
+    raw_transcript: Optional[str] = ""
+
 
