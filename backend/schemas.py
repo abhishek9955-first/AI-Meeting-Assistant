@@ -32,4 +32,9 @@ class UserResponse(BaseModel):
 
 
 class TranscriptRefineRequest(BaseModel):
-    raw_transcript: str
+    raw_transcript: str
+
+
+class DocumentationRequest(BaseModel):
+    refined_transcript: str
+

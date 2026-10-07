@@ -10,6 +10,7 @@ export default function Meeting() {
     // Process States
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [isRefining, setIsRefining] = useState(false);
+    const [isDocumenting, setIsDocumenting] = useState(false);
     const [fileLocked, setFileLocked] = useState(false);
     
     // Data States
@@ -124,8 +125,8 @@ export default function Meeting() {
         }
     };
 
-    // Step 2: Proceed with Edited Raw Transcript -> AI Refinement & Meeting Minutes
-    const handleProceedWithEditedTranscript = async () => {
+    // Step 2: Post to LLM 1 (/refine) -> Refined Transcript
+    const handleRefineTranscript = async () => {
         if (!rawTranscript || !rawTranscript.trim()) {
             setError("Raw transcript is empty. Please enter or transcribe text first.");
             return;
@@ -135,7 +136,7 @@ export default function Meeting() {
             setError("");
             setIsRefining(true);
 
-            const response = await fetch(`${apiUrl}/generate-minutes`, {
+            const response = await fetch(`${apiUrl}/refine`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -158,13 +159,56 @@ export default function Meeting() {
             }
 
             setRefinedTranscript(result.refined_transcript || "");
-            setMeetingRecord(result.meeting_record || null);
-            setTab("transcripts"); // Navigate smoothly to dual transcript view
+            setTab("transcripts"); // Navigate to dual transcript view
         } catch (err) {
             console.error("Refinement failed:", err);
-            setError(err.message || "Failed to refine transcript and generate minutes.");
+            setError(err.message || "Failed to refine transcript with LLM 1.");
         } finally {
             setIsRefining(false);
+        }
+    };
+
+    // Step 3: Post to LLM 2 (/document) -> Structured Meeting Minutes
+    const handleGenerateMinutes = async () => {
+        const textToDocument = refinedTranscript || rawTranscript;
+        if (!textToDocument || !textToDocument.trim()) {
+            setError("Refined transcript is empty. Please refine transcript first.");
+            return;
+        }
+
+        try {
+            setError("");
+            setIsDocumenting(true);
+
+            const response = await fetch(`${apiUrl}/document`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    refined_transcript: textToDocument.trim()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.details || errorData.error || errorData.detail || `Server error: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (result.error) {
+                setError(result.error + (result.details ? `: ${result.details}` : ""));
+                setIsDocumenting(false);
+                return;
+            }
+
+            setMeetingRecord(result.meeting_record || null);
+            setTab("minutes"); // Navigate to meeting minutes view
+        } catch (err) {
+            console.error("Documentation failed:", err);
+            setError(err.message || "Failed to generate meeting minutes with LLM 2.");
+        } finally {
+            setIsDocumenting(false);
         }
     };
 
@@ -282,7 +326,7 @@ export default function Meeting() {
                             Turn meetings into <span>actionable insights</span>
                         </h2>
                         <p>
-                            Upload your meeting audio, review and edit the raw speech transcript, then let AI refine it into structured decisions and action items.
+                            Upload your meeting audio, review and edit the raw speech transcript, then refine it and extract structured minutes.
                         </p>
                     </div>
 
@@ -447,7 +491,7 @@ export default function Meeting() {
                                 </div>
 
                                 <div className="raw-editor-instruction">
-                                    💡 <strong>Review & Edit:</strong> You can edit any acronyms, speaker names, or technical terms in the box below before continuing.
+                                    💡 <strong>Review & Edit:</strong> You can edit any acronyms, speaker names, or technical terms in the box below before sending to LLM 1 for refinement.
                                 </div>
 
                                 <textarea
@@ -463,16 +507,16 @@ export default function Meeting() {
                                         type="button"
                                         className="btn-proceed"
                                         disabled={isRefining || !rawTranscript.trim()}
-                                        onClick={handleProceedWithEditedTranscript}
+                                        onClick={handleRefineTranscript}
                                     >
                                         {isRefining ? (
                                             <>
                                                 <div className="btn-spinner" />
-                                                <span>Refining & Extracting Meeting Minutes...</span>
+                                                <span>Refining Transcript with LLM 1...</span>
                                             </>
                                         ) : (
                                             <>
-                                                <span>Proceed to Refine & Generate Meeting Minutes</span>
+                                                <span>Refine Transcript with AI (LLM 1)</span>
                                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <line x1="5" y1="12" x2="19" y2="12" />
                                                     <polyline points="12 5 19 12 12 19" />
@@ -599,9 +643,9 @@ export default function Meeting() {
                                 </div>
 
                                 <div className="panel-content raw-content">
-                                    {rawTranscript.split("\n").map((para, i) => (
+                                    {rawTranscript ? rawTranscript.split("\n").map((para, i) => (
                                         <p key={i}>{para}</p>
-                                    ))}
+                                    )) : <p style={{ color: '#94a3b8' }}>No raw transcript available.</p>}
                                 </div>
                             </div>
                         )}
@@ -613,7 +657,7 @@ export default function Meeting() {
                                     <div className="panel-header-left">
                                         <span className="panel-badge refined-badge">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                                            AI-Refined Transcript
+                                            AI-Refined Transcript (LLM 1)
                                         </span>
                                         <span className="word-count">{countWords(refinedTranscript)} words</span>
                                     </div>
@@ -640,26 +684,36 @@ export default function Meeting() {
                                 </div>
 
                                 <div className="panel-content refined-content">
-                                    {refinedTranscript.split("\n").map((para, i) => (
+                                    {refinedTranscript ? refinedTranscript.split("\n").map((para, i) => (
                                         <p key={i}>{para}</p>
-                                    ))}
+                                    )) : <p style={{ color: '#94a3b8' }}>Refined transcript is being generated...</p>}
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Bottom Link to Meeting Minutes */}
+                    {/* Bottom Action: Proceed to LLM 2 (Meeting Minutes) */}
                     <div className="transcripts-bottom-bar">
                         <button
                             type="button"
                             className="btn-next-step"
-                            onClick={() => setTab("minutes")}
+                            disabled={isDocumenting || (!refinedTranscript && !rawTranscript)}
+                            onClick={handleGenerateMinutes}
                         >
-                            <span>View Meeting Minutes & Decisions</span>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="5" y1="12" x2="19" y2="12" />
-                                <polyline points="12 5 19 12 12 19" />
-                            </svg>
+                            {isDocumenting ? (
+                                <>
+                                    <div className="btn-spinner" />
+                                    <span>Generating Minutes & Extracting Tasks (LLM 2)...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Generate Meeting Minutes & Action Items (LLM 2)</span>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                        <polyline points="12 5 19 12 12 19" />
+                                    </svg>
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

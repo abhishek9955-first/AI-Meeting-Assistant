@@ -1,6 +1,6 @@
 import os
 from fastapi.staticfiles import StaticFiles
-from schemas import UserRegister, UserLogin, UserResponse, TranscriptRefineRequest
+from schemas import UserRegister, UserLogin, UserResponse, TranscriptRefineRequest, DocumentationRequest
 import jwt 
 from datetime import datetime, timedelta
 
@@ -79,6 +79,49 @@ async def transcribe_only(file: UploadFile = File(...)):
         }
 
 
+# LLM 1: Raw Transcript -> Refined Transcript
+@app.post("/refine")
+async def refine_transcript_endpoint(req: TranscriptRefineRequest):
+    if not req.raw_transcript or not req.raw_transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Raw transcript cannot be empty."
+        )
+
+    try:
+        refined_transcript = refine_transcript(req.raw_transcript)
+        return {
+            "refined_transcript": refined_transcript
+        }
+    except Exception as e:
+        return {
+            "error": "Refinement failed.",
+            "details": str(e)
+        }
+
+
+# LLM 2: Refined Transcript -> Meeting Minutes & Action Items
+@app.post("/document")
+async def document_meeting_endpoint(req: DocumentationRequest):
+    if not req.refined_transcript or not req.refined_transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refined transcript cannot be empty."
+        )
+
+    try:
+        meeting_record = generate_documentation(req.refined_transcript)
+        return {
+            "meeting_record": meeting_record
+        }
+    except Exception as e:
+        return {
+            "error": "Documentation generation failed.",
+            "details": str(e)
+        }
+
+
+# Combined Endpoint for backwards compatibility
 @app.post("/generate-minutes")
 async def generate_minutes_from_raw(req: TranscriptRefineRequest):
     if not req.raw_transcript or not req.raw_transcript.strip():
