@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Meeting Assistant</title>
+
+    <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header class="header">
+
+        <div class="logo">
+            <div class="logo-icon">AI</div>
+
+            <div>
+                <h1>Meeting Assistant</h1>
+                <p>AI-powered meeting intelligence</p>
+            </div>
+        </div>
+
+        <div class="status">
+            <span class="status-dot"></span>
+            System Ready
+        </div>
+
+    </header>
+
+
+    <!-- Main Container -->
+    <main class="container">
+
+        <!-- Hero Section -->
+        
+
+
+        <!-- Upload Card -->
+        <section class="upload-card">
+
+            <div class="upload-icon">
+                🎙️
+            </div>
+
+            <h3>Upload Meeting Recording</h3>
+
+            <p>
+                Supported formats: MP3, WAV, AAC, M4A, OGG
+            </p>
+
+            <input
+                type="file"
+                id="audio-file"
+                accept=".aac,.mp3,.wav,.m4a,.ogg,audio/*"
+            >
+
+            <label for="audio-file" class="file-label">
+                Choose Audio File
+            </label>
+
+            <div id="selected-file">
+                No file selected
+            </div>
+
+            <button id="process-button" class="process-button">
+                <span>✨</span>
+                Process Meeting
+            </button>
+
+        </section>
+
+
+        <!-- Loading -->
+        <div id="loading" class="loading">
+
+            <div class="spinner"></div>
+
+            <div>
+                <strong>Processing meeting...</strong>
+
+                <p>
+                    Transcribing → Refining → Generating meeting record
+                </p>
+            </div>
+
+        </div>
+
+
+        <!-- Results -->
+        <section id="results" class="results">
+
+
+            <!-- Raw Transcript -->
+            <div class="result-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">📝</span>
+
+                        <div>
+                            <h3>Raw Transcript</h3>
+                            <p>Original speech-to-text output</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="raw-transcript" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Refined Transcript -->
+            <div class="result-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">✨</span>
+
+                        <div>
+                            <h3>Refined Transcript</h3>
+                            <p>AI-corrected and domain-refined transcript</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="refined-transcript" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Summary -->
+            <div class="result-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">📌</span>
+
+                        <div>
+                            <h3>Meeting Summary</h3>
+                            <p>Key points discussed during the meeting</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="summary" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Minutes -->
+            <div class="result-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">📋</span>
+
+                        <div>
+                            <h3>Meeting Minutes</h3>
+                            <p>Important discussion points</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="minutes" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Decisions -->
+            <div class="result-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">✅</span>
+
+                        <div>
+                            <h3>Decisions</h3>
+                            <p>Confirmed decisions from the meeting</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="decisions" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Action Items -->
+            <div class="result-card action-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <span class="card-icon">🚀</span>
+
+                        <div>
+                            <h3>Action Items</h3>
+                            <p>Tasks assigned during the meeting</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="action-items" class="content-box">
+                </div>
+
+            </div>
+
+
+            <!-- Downloads -->
+            <div class="download-section">
+
+                <h3>Download Results</h3>
+
+                <p>
+                    Save the generated meeting information for later use.
+                </p>
+
+                <div class="download-buttons">
+
+                    <button
+                        id="download-transcript"
+                        class="download-button"
+                    >
+                        📄 Download Transcript
+                    </button>
+
+                    <button
+                        id="download-record"
+                        class="download-button primary"
+                    >
+                        📥 Download Meeting Record
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- Footer -->
+    <footer>
+
+        <p>
+            AI Meeting Assistant • Powered by Speech Recognition & AI
+        </p>
+
+    </footer>
+
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>

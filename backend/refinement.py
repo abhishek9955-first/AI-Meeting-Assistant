@@ -1,17 +1,14 @@
 import os
-from openai import OpenAI
 from dotenv import load_dotenv
-
+from google import genai
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+load_dotenv()
 
-dotenv_path = os.path.join(BASE_DIR, ".env")
-
-load_dotenv(dotenv_path)
-
-api_key = os.getenv("OPENAI_API_KEY")
-
-client = OpenAI(api_key=api_key)
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 def refine_transcript(raw_transcript):
 
@@ -36,9 +33,9 @@ RAW TRANSCRIPT:
 {raw_transcript}
 """
 
-    response = client.responses.create(
-        model="gpt-6-luna",
-        input=prompt
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
     )
 
-    return response.output_text.strip()
+    return response.text.strip()
