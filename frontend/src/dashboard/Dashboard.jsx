@@ -6,21 +6,61 @@ import Decode from '../decode/Decode'
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')
-  const navigate=useNavigate()
-  const user = JSON.parse(localStorage.getItem("user"))
+  const [stats, setStats] = useState({
+    total_meetings: 0,
+    total_action_items: 0,
+    total_decisions: 0,
+    audio_hours: '0 hrs',
+    recent_meetings: []
+  })
+  const [loadingStats, setLoadingStats] = useState(true)
+  const navigate = useNavigate()
+
+  // Safely parse user from localStorage
+  const user = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user')) || { name: 'MeetAI User', email: 'user@meetai.com' }
+    } catch {
+      return { name: 'MeetAI User', email: 'user@meetai.com' }
+    }
+  })()
+
+  // Fetch real MongoDB statistics on load or when switching back to dashboard tab
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true)
+        const response = await fetch('http://localhost:8000/dashboard/stats')
+        if (response.ok) {
+          const data = await response.json()
+          setStats(data)
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard stats:', err)
+      } finally {
+        setLoadingStats(false)
+      }
+    }
+
+    if (activeTab === 'dashboard') {
+      fetchStats()
+    }
+  }, [activeTab])
 
   const handleLogout = () => {
-    localStorage.removeItem("user")
-    localStorage.removeItem("accesstoken")
+    localStorage.removeItem('user')
+    localStorage.removeItem('accesstoken')
     navigate('/login')
   }
+
+  const userInitial = user?.name ? user.name.trim().charAt(0).toUpperCase() : 'U'
 
   return (
     <div className="dashboard-layout">
       {/* ================= SIDEBAR ================= */}
       <aside className="dashboard-sidebar">
         <div className="sidebar-top">
-          {/* Meet AI Brand & AI Transcription Icon */}
+          {/* Brand Header */}
           <div className="sidebar-brand">
             <div className="brand-icon-box">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -31,7 +71,7 @@ export default function Dashboard() {
             </div>
             <div className="brand-info">
               <span className="brand-title">Meet AI</span>
-              <span className="brand-tagline">AI Transcription</span>
+              <span className="brand-tagline">AI Meeting Assistant</span>
             </div>
           </div>
 
@@ -63,7 +103,7 @@ export default function Dashboard() {
                 <line x1="16" y1="17" x2="8" y2="17" />
                 <line x1="10" y1="9" x2="8" y2="9" />
               </svg>
-              <span>Meeting</span>
+              <span>Meeting AI</span>
             </button>
 
             <button
@@ -85,10 +125,10 @@ export default function Dashboard() {
         {/* Sidebar Bottom (Profile & Logout) */}
         <div className="sidebar-bottom">
           <div className="profile-card">
-            <div className="profile-avatar">{user.name[0].toUpperCase()}</div>
+            <div className="profile-avatar">{userInitial}</div>
             <div className="profile-info">
-              <span className="profile-name">{user.name}</span>
-              <span className="profile-email">{user.email}</span>
+              <span className="profile-name">{user?.name || 'MeetAI User'}</span>
+              <span className="profile-email">{user?.email || 'user@meetai.com'}</span>
             </div>
           </div>
 
@@ -106,12 +146,12 @@ export default function Dashboard() {
       {/* ================= RIGHT MAIN CONTENT ================= */}
       <main className="dashboard-main">
         {activeTab === 'dashboard' ? (
-          <div>
-            {/* Top Greeting & Quick Action */}
+          <div className="dashboard-content-container">
+            {/* Top Greeting & Action Header */}
             <header className="main-header">
               <div className="header-title-group">
-                <h1>Overview</h1>
-                <p>Track your meetings, recordings, and AI-generated action items</p>
+                <h1>Welcome back, {user?.name ? user.name.split(' ')[0] : 'there'} 👋</h1>
+                <p>Track your meetings, recordings, and AI-generated decisions and action items</p>
               </div>
               <div className="header-actions">
                 <button
@@ -128,7 +168,7 @@ export default function Dashboard() {
               </div>
             </header>
 
-            {/* Stat Cards */}
+            {/* Statistics Cards Grid */}
             <div className="stats-grid">
               <div className="stat-card">
                 <div className="stat-icon purple">
@@ -139,7 +179,7 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className="stat-info">
-                  <span className="stat-value">12</span>
+                  <span className="stat-value">{loadingStats ? '—' : stats.total_meetings}</span>
                   <span className="stat-label">Total Meetings</span>
                 </div>
               </div>
@@ -151,21 +191,8 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className="stat-info">
-                  <span className="stat-value">34</span>
-                  <span className="stat-label">Action Items</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon blue">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </div>
-                <div className="stat-info">
-                  <span className="stat-value">8.5 hrs</span>
-                  <span className="stat-label">Audio Transcribed</span>
+                  <span className="stat-value">{loadingStats ? '—' : stats.total_action_items}</span>
+                  <span className="stat-label">Action Items Extracted</span>
                 </div>
               </div>
 
@@ -177,8 +204,21 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className="stat-info">
-                  <span className="stat-value">18</span>
-                  <span className="stat-label">Key Decisions</span>
+                  <span className="stat-value">{loadingStats ? '—' : stats.total_decisions}</span>
+                  <span className="stat-label">Confirmed Decisions</span>
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-icon blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                </div>
+                <div className="stat-info">
+                  <span className="stat-value">{loadingStats ? '—' : stats.audio_hours}</span>
+                  <span className="stat-label">Audio Processed</span>
                 </div>
               </div>
             </div>
@@ -186,59 +226,75 @@ export default function Dashboard() {
             {/* Recent Meetings Section */}
             <div className="dashboard-section">
               <div className="section-header">
-                <h2 className="section-title">Recent Meetings</h2>
-              </div>
-              <div className="meeting-list">
-                <div className="meeting-item">
-                  <div className="meeting-left">
-                    <div className="meeting-badge-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="meeting-title">Product Roadmap & Sprint Planning</div>
-                      <div className="meeting-date">Today at 10:30 AM • 45 mins</div>
-                    </div>
-                  </div>
-                  <div className="meeting-right">
-                    <span className="status-pill completed">Completed</span>
-                    <button
-                      type="button"
-                      className="btn-view-meeting"
-                      onClick={() => setActiveTab('meeting')}
-                    >
-                      View Details
-                    </button>
-                  </div>
+                <div>
+                  <h2 className="section-title">Recent Meetings</h2>
+                  <p className="section-subtitle">Your transcribed recordings and AI summaries stored in MongoDB</p>
                 </div>
+              </div>
 
-                <div className="meeting-item">
-                  <div className="meeting-left">
-                    <div className="meeting-badge-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="meeting-title">Client Sync & Architecture Review</div>
-                      <div className="meeting-date">Yesterday at 3:15 PM • 32 mins</div>
-                    </div>
-                  </div>
-                  <div className="meeting-right">
-                    <span className="status-pill completed">Completed</span>
-                    <button
-                      type="button"
-                      className="btn-view-meeting"
-                      onClick={() => setActiveTab('meeting')}
-                    >
-                      View Details
-                    </button>
-                  </div>
+              {loadingStats ? (
+                <div className="dashboard-loading-state">
+                  <div className="loading-spinner" />
+                  <span>Loading meetings from database...</span>
                 </div>
-              </div>
+              ) : stats.recent_meetings && stats.recent_meetings.length > 0 ? (
+                <div className="meeting-list">
+                  {stats.recent_meetings.map((meeting) => (
+                    <div key={meeting.id} className="meeting-item">
+                      <div className="meeting-left">
+                        <div className="meeting-badge-icon">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                          </svg>
+                        </div>
+                        <div className="meeting-text-group">
+                          <div className="meeting-title">{meeting.title}</div>
+                          <div className="meeting-date">{meeting.date}</div>
+                        </div>
+                      </div>
+                      <div className="meeting-right">
+                        <div className="meeting-meta-pills">
+                          {meeting.action_items_count > 0 && (
+                            <span className="count-tag blue">{meeting.action_items_count} Tasks</span>
+                          )}
+                          {meeting.decisions_count > 0 && (
+                            <span className="count-tag green">{meeting.decisions_count} Decisions</span>
+                          )}
+                        </div>
+                        <span className="status-pill completed">Completed</span>
+                        <button
+                          type="button"
+                          className="btn-view-meeting"
+                          onClick={() => setActiveTab('meeting')}
+                        >
+                          Open Meeting
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="dashboard-empty-state">
+                  <div className="empty-icon-circle">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                  </div>
+                  <h3>No meetings documented yet</h3>
+                  <p>Upload your first meeting recording to transcribe, refine, and generate AI minutes automatically.</p>
+                  <button
+                    type="button"
+                    className="btn-start-first"
+                    onClick={() => setActiveTab('meeting')}
+                  >
+                    Start New Meeting
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : activeTab === 'decode' ? (

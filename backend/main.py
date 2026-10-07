@@ -111,6 +111,20 @@ async def document_meeting_endpoint(req: DocumentationRequest):
 
     try:
         meeting_record = generate_documentation(req.refined_transcript)
+        
+        # Persist meeting in MongoDB
+        meeting_doc = {
+            "title": (meeting_record.summary[:55] + "...") if len(meeting_record.summary) > 55 else meeting_record.summary,
+            "summary": meeting_record.summary,
+            "decisions": meeting_record.decisions,
+            "action_items": [item.dict() for item in meeting_record.action_items],
+            "minutes": meeting_record.minutes,
+            "refined_transcript": req.refined_transcript,
+            "created_at": datetime.utcnow().isoformat(),
+            "formatted_date": datetime.utcnow().strftime("%b %d, %Y • %I:%M %p")
+        }
+        await meetings_collection.insert_one(meeting_doc)
+
         return {
             "meeting_record": meeting_record
         }
@@ -133,6 +147,20 @@ async def generate_minutes_from_raw(req: TranscriptRefineRequest):
     try:
         refined_transcript = refine_transcript(req.raw_transcript)
         meeting_record = generate_documentation(refined_transcript)
+
+        # Persist meeting in MongoDB
+        meeting_doc = {
+            "title": (meeting_record.summary[:55] + "...") if len(meeting_record.summary) > 55 else meeting_record.summary,
+            "summary": meeting_record.summary,
+            "decisions": meeting_record.decisions,
+            "action_items": [item.dict() for item in meeting_record.action_items],
+            "minutes": meeting_record.minutes,
+            "refined_transcript": refined_transcript,
+            "created_at": datetime.utcnow().isoformat(),
+            "formatted_date": datetime.utcnow().strftime("%b %d, %Y • %I:%M %p")
+        }
+        await meetings_collection.insert_one(meeting_doc)
+
         return {
             "refined_transcript": refined_transcript,
             "meeting_record": meeting_record
@@ -142,6 +170,46 @@ async def generate_minutes_from_raw(req: TranscriptRefineRequest):
             "error": "Documentation generation failed.",
             "details": str(e)
         }
+
+
+@app.get("/dashboard/stats")
+async def get_dashboard_stats():
+    try:
+        total_meetings = await meetings_collection.count_documents({})
+        meetings_cursor = meetings_collection.find().sort("created_at", -1).limit(6)
+        meetings_list = await meetings_cursor.to_list(length=6)
+        
+        all_meetings = await meetings_collection.find().to_list(length=1000)
+        total_action_items = sum(len(m.get("action_items", [])) for m in all_meetings)
+        total_decisions = sum(len(m.get("decisions", [])) for m in all_meetings)
+        
+        recent = []
+        for m in meetings_list:
+            recent.append({
+                "id": str(m["_id"]),
+                "title": m.get("title", "Meeting Overview"),
+                "summary": m.get("summary", ""),
+                "date": m.get("formatted_date", "Recently"),
+                "action_items_count": len(m.get("action_items", [])),
+                "decisions_count": len(m.get("decisions", []))
+            })
+            
+        return {
+            "total_meetings": total_meetings,
+            "total_action_items": total_action_items,
+            "total_decisions": total_decisions,
+            "audio_hours": f"{round(total_meetings * 0.5, 1)} hrs",
+            "recent_meetings": recent
+        }
+    except Exception as e:
+        return {
+            "total_meetings": 0,
+            "total_action_items": 0,
+            "total_decisions": 0,
+            "audio_hours": "0 hrs",
+            "recent_meetings": []
+        }
+
 
 
 @app.post("/process")
