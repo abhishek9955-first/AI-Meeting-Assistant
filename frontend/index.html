@@ -62,23 +62,23 @@
             </p>
 
             <input
-                type="file"
-                id="audio-file"
-                accept=".aac,.mp3,.wav,.m4a,.ogg,audio/*"
-            >
+         type="file"
+         id="audio-file"
+         accept=".aac,.mp3,.wav,.m4a,.ogg,.opus,audio/*"
+>
 
-            <label for="audio-file" class="file-label">
-                Choose Audio File
-            </label>
+     <label for="audio-file" class="file-label">
+    Choose Audio File
+     </label>
 
-            <div id="selected-file">
-                No file selected
-            </div>
+     <div id="selected-file">
+    No file selected
+     </div>
 
-            <button id="process-button" class="process-button">
-                <span>✨</span>
-                Process Meeting
-            </button>
+    <button id="process-button" class="process-button">
+    <span>✨</span>
+    Process Meeting
+    </button>
 
         </section>
 
@@ -265,6 +265,80 @@
             </div>
 
         </section>
+
+
+        <!-- Clue Board Scanner -->
+
+<section class="card clue-board-section">
+
+    <div class="section-icon">
+        🔍
+    </div>
+
+    <h2>Scan Clue Board</h2>
+
+    <p>
+        Upload a clue board image containing an ArUco marker and QR code.
+    </p>
+
+    <label for="clue-image" class="file-upload-button">
+    📷 Choose Clue Board Image
+</label>
+
+<input
+    type="file"
+    id="clue-image"
+    accept="image/*"
+    style="display: none;"
+>
+
+    <div id="clue-file-name">
+        No image selected
+    </div>
+
+    <button id="scan-clue-button" class="process-button">
+        🔍 Scan Clue Board
+    </button>
+
+    <div id="clue-loading" class="loading">
+        <div class="spinner"></div>
+        <div>
+            <strong>Scanning clue board...</strong>
+            <p>
+                Detecting ArUco marker and QR code
+            </p>
+        </div>
+    </div>
+
+    <div id="clue-result" class="content-box">
+
+        <p>
+            ArUco: <strong id="aruco-status">Not scanned</strong>
+        </p>
+
+        <p>
+            Marker ID:
+            <strong id="aruco-id">-</strong>
+        </p>
+
+        <p>
+            QR Code:
+            <strong id="qr-status">Not scanned</strong>
+        </p>
+
+        <p>
+            QR Data:
+            <strong id="qr-data">-</strong>
+        </p>
+
+    </div>
+
+</section>
+
+
+
+
+
 
     </main>
 

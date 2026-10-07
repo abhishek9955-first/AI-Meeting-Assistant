@@ -5,6 +5,7 @@ import os
 from fastapi import FastAPI, UploadFile, File
 from pipeline import process_meeting
 from utils import save_uploaded_file
+from vision import scan_clue_board
 
 app = FastAPI()
 
@@ -48,4 +49,19 @@ frontend_path = os.path.join(
     "frontend"
 )
 
+
+
+
+# vision.py
+
+@app.post("/scan-clue")
+async def scan_clue(file: UploadFile = File(...)):
+
+    image_path = save_uploaded_file(file)
+
+    result = scan_clue_board(image_path)
+
+    return result
+
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+

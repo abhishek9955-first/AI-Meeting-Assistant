@@ -1,6 +1,16 @@
 const fileInput = document.getElementById("audio-file");
 const processButton = document.getElementById("process-button");
 const loading = document.getElementById("loading");
+const selectedFile = document.getElementById("selected-file");
+
+
+fileInput.addEventListener("change", function () {
+    if (fileInput.files.length > 0) {
+        selectedFile.textContent = fileInput.files[0].name;
+    } else {
+        selectedFile.textContent = "No file selected";
+    }
+});
 const downloadTranscript =
     document.getElementById("download-transcript");
 
@@ -137,4 +147,127 @@ downloadRecord.addEventListener("click", function () {
     link.click();
 
     URL.revokeObjectURL(url);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Vision.py
+
+// ===============================
+// Clue Board Scanner
+// ===============================
+
+const clueImage = document.getElementById("clue-image");
+const clueFileName = document.getElementById("clue-file-name");
+const scanClueButton = document.getElementById("scan-clue-button");
+
+const clueLoading = document.getElementById("clue-loading");
+
+const arucoStatus = document.getElementById("aruco-status");
+const arucoId = document.getElementById("aruco-id");
+
+const qrStatus = document.getElementById("qr-status");
+const qrData = document.getElementById("qr-data");
+
+
+// Show selected file name
+clueImage.addEventListener("change", function () {
+
+    if (clueImage.files.length > 0) {
+        clueFileName.textContent = clueImage.files[0].name;
+    } else {
+        clueFileName.textContent = "No image selected";
+    }
+
+});
+
+
+// Scan clue board
+scanClueButton.addEventListener("click", async function () {
+
+    const file = clueImage.files[0];
+
+    if (!file) {
+        alert("Please select a clue board image first.");
+        return;
+    }
+
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    clueLoading.style.display = "block";
+
+    try {
+
+        const response = await fetch("http://127.0.0.1:8000/scan-clue", {
+            method: "POST",
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.detail || result.error || "Failed to scan clue board.");
+            return;
+        }
+
+
+        // ArUco result
+        if (result.aruco_detected) {
+
+            arucoStatus.textContent = "Detected ✓";
+
+            arucoId.textContent =
+                result.aruco_ids.join(", ");
+
+        } else {
+
+            arucoStatus.textContent = "Not detected";
+
+            arucoId.textContent = "-";
+        }
+
+
+        // QR result
+        if (result.qr_detected) {
+
+            qrStatus.textContent = "Detected ✓";
+
+            qrData.textContent = result.qr_data;
+
+        } else {
+
+            qrStatus.textContent = "Not detected";
+
+            qrData.textContent = "-";
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert("Something went wrong while scanning the clue board.");
+
+    }
+
+    finally {
+
+        clueLoading.style.display = "none";
+
+    }
+
 });
