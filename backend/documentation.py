@@ -1,62 +1,69 @@
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
+import requests
+import json
 from schemas import MeetingRecord
 
 
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL = "qwen3:1.7b"
 
 
 def generate_documentation(refined_transcript):
 
-    prompt = f"""
+    system_prompt = """
 You are a meeting documentation assistant.
 
-Create a structured meeting record from the refined transcript.
+Create a structured meeting record from the transcript.
 
-Rules:
+STRICT RULES:
 1. Use ONLY information present in the transcript.
-2. Do not invent facts.
-3. Do not turn a proposal into a decision.
-4. Do not create an action item unless the task was actually assigned.
-5. If the owner is not mentioned, use "Unspecified".
-6. If the deadline is not mentioned, use "Unspecified".
+2. Do not invent information.
+3. Do not turn a proposal or suggestion into a decision.
+4. Create an action item ONLY when a task was actually assigned.
+5. If owner is not stated, use "Unspecified".
+6. If deadline is not stated, use "Unspecified".
 7. Keep the summary concise.
-8. Extract important meeting minutes.
-9. Extract only confirmed decisions.
-10. Extract actionable tasks.
+8. Include important meeting points in minutes.
+9. Include only confirmed decisions.
 
-Return the result in this JSON format:
+Return ONLY valid JSON in exactly this format:
 
-{{
-    "summary": "short summary",
-    "minutes": [
-        "important point 1",
-        "important point 2"
-    ],
-    "decisions": [
-        "confirmed decision 1"
-    ],
-    "action_items": [
-        {{
-            "task": "task description",
-            "owner": "person or Unspecified",
-            "deadline": "deadline or Unspecified"
-        }}
-    ]
-}}
-
-REFINED TRANSCRIPT:
-{refined_transcript}
+{
+  "summary": "short summary",
+  "minutes": ["important point"],
+  "decisions": ["confirmed decision"],
+  "action_items": [
+    {
+      "task": "task description",
+      "owner": "person or Unspecified",
+      "deadline": "deadline or Unspecified"
+    }
+  ]
+}
 """
 
-    response = client.responses.create(
-        model="gpt-6-luna",
-        input=prompt
+    response = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": refined_transcript
+                }
+            ],
+            "format": "json",
+            "stream": False
+        }
     )
 
-    result = response.output_text
+    response.raise_for_status()
 
-    return MeetingRecord.model_validate_json(result)
+    result = response.json()
+
+    output = result["message"]["content"]
+
+    return MeetingRecord.model_validate_json(output)

@@ -1,21 +1,13 @@
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
+import requests
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL = "qwen3:1.7b"
 
-dotenv_path = os.path.join(BASE_DIR, ".env")
-
-load_dotenv(dotenv_path)
-
-api_key = os.getenv("OPENAI_API_KEY")
-
-client = OpenAI(api_key=api_key)
 
 def refine_transcript(raw_transcript):
 
-    prompt = f"""
+    system_prompt = """
 You are a transcript refinement assistant.
 
 Your job is to correct errors in the raw meeting transcript,
@@ -30,15 +22,29 @@ Rules:
 5. Preserve names, numbers, negations, and commitments.
 6. If you are uncertain about a correction, keep the original wording.
 
-Return only the refined transcript.
-
-RAW TRANSCRIPT:
-{raw_transcript}
+Return ONLY the refined transcript.
 """
 
-    response = client.responses.create(
-        model="gpt-6-luna",
-        input=prompt
+    response = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": raw_transcript
+                }
+            ],
+            "stream": False
+        }
     )
 
-    return response.output_text.strip()
+    response.raise_for_status()
+
+    result = response.json()
+
+    return result["message"]["content"].strip()
