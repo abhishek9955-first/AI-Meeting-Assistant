@@ -26,13 +26,6 @@ export default function Meeting() {
     const apiUrl = "http://localhost:8000";
     const navigate = useNavigate();
 
-    useEffect(() => {
-        const accessToken = localStorage.getItem('accesstoken');
-        if (!accessToken) {
-            navigate('/login');
-        }
-    }, [navigate]);
-
     const acceptedFormats = [
         { label: "MP3", ext: "audio/mpeg" },
         { label: "WAV", ext: "audio/wav" },

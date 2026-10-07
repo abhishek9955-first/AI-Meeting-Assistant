@@ -1,17 +1,20 @@
-from fastapi.staticfiles import StaticFiles
 import os
-from schemas import UserRegister ,UserLogin,UserResponse
+from fastapi.staticfiles import StaticFiles
+from schemas import UserRegister, UserLogin, UserResponse, TranscriptRefineRequest
 import jwt 
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, UploadFile, File,HTTPException,status
+from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware 
 from pipeline import process_meeting
+from transcription import transcribe_audio
+from refinement import refine_transcript
+from documentation import generate_documentation
 from utils import save_uploaded_file
 from vision import scan_clue_board
 
 
-SECRET_KEY="6UkPR5eI6OY3jDzLijp+t6EnYRXnh0EBLCjVNkiZmhk="
+SECRET_KEY = "6UkPR5eI6OY3jDzLijp+t6EnYRXnh0EBLCjVNkiZmhk="
 ALGORITHM = "HS256"
 
 
@@ -41,9 +44,66 @@ app.add_middleware(
 )
 
 
+@app.post("/transcribe")
+async def transcribe_only(file: UploadFile = File(...)):
+    if not file.filename:
+        return {"error": "No file was selected."}
+
+    allowed_types = [
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/mp4",
+        "audio/aac",
+        "audio/x-m4a",
+        "audio/ogg",
+        "audio/flac"
+    ]
+
+    if not file.content_type or not file.content_type.startswith("audio/"):
+        return {
+            "error": "Unsupported file type. Please upload an audio file."
+        }
+
+    audio_path = save_uploaded_file(file)
+
+    try:
+        raw_transcript = transcribe_audio(audio_path)
+        return {
+            "raw_transcript": raw_transcript
+        }
+    except Exception as e:
+        return {
+            "error": "The audio could not be transcribed.",
+            "details": str(e)
+        }
+
+
+@app.post("/generate-minutes")
+async def generate_minutes_from_raw(req: TranscriptRefineRequest):
+    if not req.raw_transcript or not req.raw_transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Raw transcript cannot be empty."
+        )
+
+    try:
+        refined_transcript = refine_transcript(req.raw_transcript)
+        meeting_record = generate_documentation(refined_transcript)
+        return {
+            "refined_transcript": refined_transcript,
+            "meeting_record": meeting_record
+        }
+    except Exception as e:
+        return {
+            "error": "Documentation generation failed.",
+            "details": str(e)
+        }
+
 
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
+
 
     if not file.filename:
         return {"error": "No file was selected."}

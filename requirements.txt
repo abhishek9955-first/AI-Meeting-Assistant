@@ -2,12 +2,12 @@ fastapi
 uvicorn[standard]
 python-multipart
 faster-whisper
-openai
+openai>=1.0.0
 python-dotenv
 pydantic
+pyjwt
 motor
 pymongo
 certifi
 opencv-python
 numpy
-
