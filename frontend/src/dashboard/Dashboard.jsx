@@ -228,7 +228,7 @@ export default function Dashboard() {
               <div className="section-header">
                 <div>
                   <h2 className="section-title">Recent Meetings</h2>
-                  <p className="section-subtitle">Your transcribed recordings and AI summaries stored in MongoDB</p>
+                  <p className="section-subtitle">Your transcribed recordings and AI summaries</p>
                 </div>
               </div>
 

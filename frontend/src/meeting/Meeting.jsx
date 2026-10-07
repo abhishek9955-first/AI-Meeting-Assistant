@@ -550,22 +550,6 @@ export default function Meeting() {
                                 </svg>
                                 <span>Back to Upload</span>
                             </button>
-                            <div className="tab-pill-group">
-                                <button
-                                    type="button"
-                                    className="tab-pill active"
-                                    onClick={() => setTab("transcripts")}
-                                >
-                                    Transcripts Comparison
-                                </button>
-                                <button
-                                    type="button"
-                                    className="tab-pill"
-                                    onClick={() => setTab("minutes")}
-                                >
-                                    Meeting Minutes & Tasks
-                                </button>
-                            </div>
                         </div>
 
                         <div className="nav-right">
@@ -738,22 +722,7 @@ export default function Meeting() {
                                 </svg>
                                 <span>Back to Transcripts</span>
                             </button>
-                            <div className="tab-pill-group">
-                                <button
-                                    type="button"
-                                    className="tab-pill"
-                                    onClick={() => setTab("transcripts")}
-                                >
-                                    Transcripts Comparison
-                                </button>
-                                <button
-                                    type="button"
-                                    className="tab-pill active"
-                                    onClick={() => setTab("minutes")}
-                                >
-                                    Meeting Minutes & Tasks
-                                </button>
-                            </div>
+                            
                         </div>
 
                         <div className="nav-right">

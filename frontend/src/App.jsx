@@ -5,6 +5,7 @@ import Login from './login/Login'
 import Register from './register/Register'
 import Dashboard from './dashboard/Dashboard'
 import Decode from './decode/Decode'
+import Meeting from './meeting/Meeting'
 
 function ProtectedRoute({ children }) {
   const user = JSON.parse(localStorage.getItem("user"))
@@ -25,6 +26,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/decode" element={<ProtectedRoute><Decode /></ProtectedRoute>} />
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path='/meeting' element={<ProtectedRoute><Meeting/></ProtectedRoute>}/>
       </Routes>
     </BrowserRouter>
   )
