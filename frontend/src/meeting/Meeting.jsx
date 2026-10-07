@@ -1,72 +1,22 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "./Meeting.css";
-
-// ==========================================================
-// TEMPORARY / MOCK DATA FOR DEMO & TESTING
-// ==========================================================
-export const MOCK_RAW_TRANSCRIPT = `Speaker 1: Alright everyone, lets start the Q3 roadmap sync. First on the agenda is the cloud migration for our core authentication service. Sarah, how is AWS migration looking?
-Speaker 2: We have completed the staging deployment on ECS and RDS Postgres. We ran into some latency bottlenecks with redis caching, but we shaved off about 40 milliseconds by tuning connection pooling.
-Speaker 1: Great. Are we still on track for the September 15th cutover?
-Speaker 2: Yes, as long as security finishes their penetration audit by next Wednesday.
-Speaker 3: Security audit is scheduled for this Friday. I will oversee the compliance sign-off.
-Speaker 1: Perfect. Also, we need to finalize the redesign for the client portal. Alex, can you take ownership of delivering the Figma prototypes?
-Speaker 4: Sure, I can deliver the revised user journeys and Figma design tokens by next Monday.
-Speaker 1: Awesome. Let's make sure we also update the API rate limiter before the mobile app release next month.`;
-
-export const MOCK_REFINED_TRANSCRIPT = `Speaker 1: Alright everyone, let's start the Q3 roadmap sync. First on the agenda is the cloud migration for our core authentication service. Sarah, how is AWS migration looking?
-Speaker 2: We have completed the staging deployment on Amazon ECS and Amazon RDS PostgreSQL. We ran into some latency bottlenecks with Redis caching, but we shaved off about 40ms by tuning connection pooling.
-Speaker 1: Great. Are we still on track for the September 15th cutover?
-Speaker 2: Yes, as long as security finishes their penetration audit by next Wednesday.
-Speaker 3: The security audit is scheduled for this Friday. I will oversee the compliance sign-off.
-Speaker 1: Perfect. Also, we need to finalize the redesign for the client portal. Alex, can you take ownership of delivering the Figma prototypes?
-Speaker 4: Sure, I can deliver the revised user journeys and Figma design tokens by next Monday.
-Speaker 1: Awesome. Let's make sure we also update the API rate limiter before the mobile app release next month.`;
-
-export const MOCK_MEETING_RECORD = {
-    summary: "The team held their Q3 roadmap sync to review the core authentication service AWS migration and upcoming deliverable milestones. Staging deployments on ECS and RDS are complete with Redis latency optimizations. The security audit is slated for Friday to ensure a September 15 cutover, while design tokens and API rate limiting tasks were distributed.",
-    decisions: [
-        "Confirmed the final cloud cutover date for September 15th.",
-        "Approved the tuned connection pooling configuration for Redis caching.",
-        "Scheduled the mandatory security penetration audit for this Friday."
-    ],
-    action_items: [
-        {
-            task: "Complete penetration test and oversee compliance sign-off",
-            owner: "Sarah / Security Team",
-            deadline: "Next Wednesday"
-        },
-        {
-            task: "Deliver revised user journeys and Figma design tokens",
-            owner: "Alex",
-            deadline: "Next Monday"
-        },
-        {
-            task: "Update API rate limiter configurations before mobile release",
-            owner: "",
-            deadline: "Next Month"
-        },
-        {
-            task: "Conduct final pre-cutover smoke tests on ECS staging",
-            owner: "",
-            deadline: ""
-        }
-    ],
-    minutes: [
-        "Discussed core authentication cloud migration to AWS ECS and RDS PostgreSQL.",
-        "Resolved Redis latency bottlenecks by tuning connection pooling, cutting latency by 40ms.",
-        "Security compliance sign-off is pending Friday's audit results.",
-        "Figma prototypes and UX token updates scheduled for Monday delivery."
-    ]
-};
+import { useNavigate } from "react-router-dom";
 
 export default function Meeting() {
     const [tab, setTab] = useState("input"); // "input" | "transcripts" | "minutes"
     const [selectedFile, setSelectedFile] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [rawTranscript, setRawTranscript] = useState(MOCK_RAW_TRANSCRIPT);
-    const [refinedTranscript, setRefinedTranscript] = useState(MOCK_REFINED_TRANSCRIPT);
-    const [meetingRecord, setMeetingRecord] = useState(MOCK_MEETING_RECORD);
+    
+    // Process States
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [isRefining, setIsRefining] = useState(false);
+    const [fileLocked, setFileLocked] = useState(false);
+    
+    // Data States
+    const [rawTranscript, setRawTranscript] = useState("");
+    const [refinedTranscript, setRefinedTranscript] = useState("");
+    const [meetingRecord, setMeetingRecord] = useState(null);
+    
     const [error, setError] = useState("");
     const [transcriptView, setTranscriptView] = useState("split"); // "split" | "raw" | "refined"
     const [copiedKey, setCopiedKey] = useState(null);
@@ -74,6 +24,14 @@ export default function Meeting() {
 
     const fileInputRef = useRef(null);
     const apiUrl = "http://localhost:8000";
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const accessToken = localStorage.getItem('accesstoken');
+        if (!accessToken) {
+            navigate('/login');
+        }
+    }, [navigate]);
 
     const acceptedFormats = [
         { label: "MP3", ext: "audio/mpeg" },
@@ -85,14 +43,18 @@ export default function Meeting() {
     ];
 
     const handleFileChange = (e) => {
+        if (fileLocked) return;
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0]);
+            setError("");
         }
     };
 
     const handleDragOver = (e) => {
         e.preventDefault();
-        setIsDragging(true);
+        if (!fileLocked) {
+            setIsDragging(true);
+        }
     };
 
     const handleDragLeave = () => {
@@ -102,13 +64,16 @@ export default function Meeting() {
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
+        if (fileLocked) return;
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             setSelectedFile(e.dataTransfer.files[0]);
+            setError("");
         }
     };
 
     const handleRemoveFile = (e) => {
         e.stopPropagation();
+        if (fileLocked) return;
         setSelectedFile(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
@@ -128,7 +93,8 @@ export default function Meeting() {
         return str.trim().split(/\s+/).filter(Boolean).length;
     };
 
-    const handleProceed = async () => {
+    // Step 1: Transcribe Audio File -> Raw Transcript
+    const handleTranscribeAudio = async () => {
         if (!selectedFile) return;
 
         const formData = new FormData();
@@ -136,30 +102,76 @@ export default function Meeting() {
 
         try {
             setError("");
-            setIsProcessing(true);
-            const response = await fetch(`${apiUrl}/process`, {
+            setIsTranscribing(true);
+            
+            const response = await fetch(`${apiUrl}/transcribe`, {
                 method: "POST",
                 body: formData
             });
+
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.details || errorData.error || `Server responded with status ${response.status}`);
             }
+
             const result = await response.json();
             if (result.error) {
                 setError(result.error + (result.details ? `: ${result.details}` : ""));
-                setIsProcessing(false);
+                setIsTranscribing(false);
                 return;
             }
+
             setRawTranscript(result.raw_transcript || "");
+            setFileLocked(true); // Lock audio file so it cannot be changed during the session
+        } catch (err) {
+            console.error("Transcription failed:", err);
+            setError(err.message || "Failed to connect to backend server. Make sure the backend is running.");
+        } finally {
+            setIsTranscribing(false);
+        }
+    };
+
+    // Step 2: Proceed with Edited Raw Transcript -> AI Refinement & Meeting Minutes
+    const handleProceedWithEditedTranscript = async () => {
+        if (!rawTranscript || !rawTranscript.trim()) {
+            setError("Raw transcript is empty. Please enter or transcribe text first.");
+            return;
+        }
+
+        try {
+            setError("");
+            setIsRefining(true);
+
+            const response = await fetch(`${apiUrl}/generate-minutes`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    raw_transcript: rawTranscript.trim()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.details || errorData.error || errorData.detail || `Server error: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (result.error) {
+                setError(result.error + (result.details ? `: ${result.details}` : ""));
+                setIsRefining(false);
+                return;
+            }
+
             setRefinedTranscript(result.refined_transcript || "");
             setMeetingRecord(result.meeting_record || null);
-            setTab("transcripts");
+            setTab("transcripts"); // Navigate smoothly to dual transcript view
         } catch (err) {
-            console.error("Processing failed:", err);
-            setError(err.message || "Failed to connect to the backend server at http://localhost:8000. Please ensure the backend is running.");
+            console.error("Refinement failed:", err);
+            setError(err.message || "Failed to refine transcript and generate minutes.");
         } finally {
-            setIsProcessing(false);
+            setIsRefining(false);
         }
     };
 
@@ -252,12 +264,16 @@ export default function Meeting() {
 
     const handleResetAll = () => {
         setSelectedFile(null);
+        setFileLocked(false);
         setRawTranscript("");
         setRefinedTranscript("");
         setMeetingRecord(null);
         setError("");
         setCompletedTasks({});
         setTab("input");
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
     };
 
     return (
@@ -273,14 +289,13 @@ export default function Meeting() {
                             Turn meetings into <span>actionable insights</span>
                         </h2>
                         <p>
-                            Upload your English meeting recording and let AI transcribe, refine,
-                            and organize structured minutes and action items automatically.
+                            Upload your meeting audio, review and edit the raw speech transcript, then let AI refine it into structured decisions and action items.
                         </p>
                     </div>
 
                     {/* Main Upload Card */}
                     <div className="meeting-card">
-                        {/* Accepted Formats Bar */}
+                        {/* Formats Bar */}
                         <div className="formats-bar">
                             <div className="formats-label">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -304,12 +319,12 @@ export default function Meeting() {
 
                         {/* Dropzone Upload Box */}
                         <div
-                            className={`dropzone-container ${isDragging ? "dragging" : ""}`}
+                            className={`dropzone-container ${isDragging ? "dragging" : ""} ${fileLocked ? "locked" : ""}`}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
                             onClick={() => {
-                                if (!selectedFile) {
+                                if (!selectedFile && !fileLocked) {
                                     fileInputRef.current?.click();
                                 }
                             }}
@@ -320,6 +335,7 @@ export default function Meeting() {
                                 accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
                                 className="hidden-file-input"
                                 onChange={handleFileChange}
+                                disabled={fileLocked}
                             />
 
                             {!selectedFile ? (
@@ -348,52 +364,60 @@ export default function Meeting() {
                                         </div>
                                         <div className="file-details">
                                             <span className="file-name">{selectedFile.name}</span>
-                                            <span className="file-size">{formatFileSize(selectedFile.size)} • Ready to process</span>
+                                            <span className="file-size">
+                                                {formatFileSize(selectedFile.size)} • {fileLocked ? "🔒 Audio locked for session" : "Ready to transcribe"}
+                                            </span>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        className="btn-remove-file"
-                                        title="Remove file"
-                                        onClick={handleRemoveFile}
-                                    >
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                            <line x1="18" y1="6" x2="6" y2="18" />
-                                            <line x1="6" y1="6" x2="18" y2="18" />
-                                        </svg>
-                                    </button>
+
+                                    {!fileLocked && (
+                                        <button
+                                            type="button"
+                                            className="btn-remove-file"
+                                            title="Remove file"
+                                            onClick={handleRemoveFile}
+                                        >
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" />
+                                                <line x1="6" y1="6" x2="18" y2="18" />
+                                            </svg>
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
 
-                        {/* Bottom Proceed Meeting Button */}
-                        <div className="proceed-wrapper">
-                            <button
-                                type="button"
-                                className="btn-proceed"
-                                disabled={!selectedFile || isProcessing}
-                                onClick={handleProceed}
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <span className="spinner-icon" />
-                                        <span>Transcribing & Processing...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>Process Meeting Audio</span>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <line x1="5" y1="12" x2="19" y2="12" />
-                                            <polyline points="12 5 19 12 12 19" />
-                                        </svg>
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                        {/* Transcribe Button (Before Raw Transcript is Generated) */}
+                        {!rawTranscript && (
+                            <div className="proceed-wrapper">
+                                <button
+                                    type="button"
+                                    className="btn-proceed"
+                                    disabled={!selectedFile || isTranscribing}
+                                    onClick={handleTranscribeAudio}
+                                >
+                                    {isTranscribing ? (
+                                        <>
+                                            <div className="btn-spinner" />
+                                            <span>Transcribing speech with Whisper AI...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>Transcribe Audio</span>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="5" y1="12" x2="19" y2="12" />
+                                                <polyline points="12 5 19 12 12 19" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
 
+                        {/* Error Alert */}
                         {error && (
-                            <div className="error-banner">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <div className="error-alert">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <circle cx="12" cy="12" r="10" />
                                     <line x1="12" y1="8" x2="12" y2="12" />
                                     <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -401,129 +425,245 @@ export default function Meeting() {
                                 <span>{error}</span>
                             </div>
                         )}
+
+                        {/* ========================================================== */}
+                        {/* RAW TRANSCRIPT BOTTOM CONTAINER (EDITABLE)                  */}
+                        {/* ========================================================== */}
+                        {rawTranscript && (
+                            <div className="raw-transcript-editor-section">
+                                <div className="raw-editor-header">
+                                    <div className="raw-editor-title-group">
+                                        <span className="raw-step-badge">Step 1</span>
+                                        <h3>Raw Speech Transcript</h3>
+                                        <span className="word-count-badge">{countWords(rawTranscript)} words</span>
+                                    </div>
+                                    <div className="raw-editor-actions">
+                                        <button
+                                            type="button"
+                                            className="btn-reset-session"
+                                            onClick={handleResetAll}
+                                            title="Reset audio and transcript"
+                                        >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                <path d="M3 3v5h5" />
+                                            </svg>
+                                            <span>Reset & New File</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="raw-editor-instruction">
+                                    💡 <strong>Review & Edit:</strong> You can edit any acronyms, speaker names, or technical terms in the box below before continuing.
+                                </div>
+
+                                <textarea
+                                    className="raw-transcript-textarea"
+                                    rows={8}
+                                    value={rawTranscript}
+                                    onChange={(e) => setRawTranscript(e.target.value)}
+                                    placeholder="Your speech transcript will appear here..."
+                                />
+
+                                <div className="raw-proceed-wrapper">
+                                    <button
+                                        type="button"
+                                        className="btn-proceed"
+                                        disabled={isRefining || !rawTranscript.trim()}
+                                        onClick={handleProceedWithEditedTranscript}
+                                    >
+                                        {isRefining ? (
+                                            <>
+                                                <div className="btn-spinner" />
+                                                <span>Refining & Extracting Meeting Minutes...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Proceed to Refine & Generate Meeting Minutes</span>
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                                    <polyline points="12 5 19 12 12 19" />
+                                                </svg>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </>
             )}
 
             {/* ============================================================== */}
-            {/* STEP 2: TRANSCRIPTS TAB (RAW & REFINED ON ONE PAGE)           */}
+            {/* STEP 2: DUAL TRANSCRIPTS TAB (RAW & REFINED)                    */}
             {/* ============================================================== */}
             {tab === "transcripts" && (
-                <div className="meeting-page-section">
-                    <div className="section-header-row">
-                        <div>
-                            <h2 className="section-title">Meeting Transcripts</h2>
-                            <p className="section-subtitle">
-                                Review the raw speech-to-text transcript alongside the AI-refined transcript.
-                            </p>
+                <div className="transcripts-layout">
+                    {/* Navigation Bar */}
+                    <div className="transcripts-navbar">
+                        <div className="nav-left">
+                            <button
+                                type="button"
+                                className="btn-back-link"
+                                onClick={() => setTab("input")}
+                            >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="19" y1="12" x2="5" y2="12" />
+                                    <polyline points="12 19 5 12 12 5" />
+                                </svg>
+                                <span>Back to Upload</span>
+                            </button>
+                            <div className="tab-pill-group">
+                                <button
+                                    type="button"
+                                    className="tab-pill active"
+                                    onClick={() => setTab("transcripts")}
+                                >
+                                    Transcripts Comparison
+                                </button>
+                                <button
+                                    type="button"
+                                    className="tab-pill"
+                                    onClick={() => setTab("minutes")}
+                                >
+                                    Meeting Minutes & Tasks
+                                </button>
+                            </div>
                         </div>
-                        <div className="view-toggle-group">
+
+                        <div className="nav-right">
+                            {/* View Switcher: Split / Raw / Refined */}
+                            <div className="view-mode-toggle">
+                                <button
+                                    type="button"
+                                    className={`toggle-btn ${transcriptView === "split" ? "active" : ""}`}
+                                    onClick={() => setTranscriptView("split")}
+                                >
+                                    Split View
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`toggle-btn ${transcriptView === "raw" ? "active" : ""}`}
+                                    onClick={() => setTranscriptView("raw")}
+                                >
+                                    Raw Only
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`toggle-btn ${transcriptView === "refined" ? "active" : ""}`}
+                                    onClick={() => setTranscriptView("refined")}
+                                >
+                                    Refined Only
+                                </button>
+                            </div>
+
                             <button
-                                className={`view-toggle-btn ${transcriptView === "split" ? "active" : ""}`}
-                                onClick={() => setTranscriptView("split")}
+                                type="button"
+                                className="btn-download-text"
+                                onClick={handleDownloadRefinedTranscriptText}
+                                title="Download Refined Transcript as .txt"
                             >
-                                Side-by-Side
-                            </button>
-                            <button
-                                className={`view-toggle-btn ${transcriptView === "refined" ? "active" : ""}`}
-                                onClick={() => setTranscriptView("refined")}
-                            >
-                                Refined Only
-                            </button>
-                            <button
-                                className={`view-toggle-btn ${transcriptView === "raw" ? "active" : ""}`}
-                                onClick={() => setTranscriptView("raw")}
-                            >
-                                Raw Only
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                <span>Export .txt</span>
                             </button>
                         </div>
                     </div>
 
                     {/* Transcripts Comparison Grid */}
-                    <div className={`transcripts-grid view-${transcriptView}`}>
-                        {/* RAW TRANSCRIPT PANEL */}
+                    <div className={`transcripts-grid ${transcriptView}`}>
+                        {/* Raw Transcript Card */}
                         {(transcriptView === "split" || transcriptView === "raw") && (
-                            <div className="transcript-card raw-card">
-                                <div className="transcript-card-header">
-                                    <div className="header-badge-group">
-                                        <span className="badge badge-raw">Raw Transcript</span>
+                            <div className="transcript-panel raw-panel">
+                                <div className="panel-header">
+                                    <div className="panel-header-left">
+                                        <span className="panel-badge raw-badge">Raw Speech-to-Text</span>
                                         <span className="word-count">{countWords(rawTranscript)} words</span>
                                     </div>
-                                    <button
-                                        className="btn-action-icon"
-                                        title="Copy raw transcript"
-                                        onClick={() => copyToClipboard(rawTranscript, "raw")}
-                                    >
-                                        {copiedKey === "raw" ? "✓ Copied" : "Copy"}
-                                    </button>
+                                    <div className="panel-header-right">
+                                        <button
+                                            type="button"
+                                            className="btn-panel-action"
+                                            onClick={() => copyToClipboard(rawTranscript, "raw")}
+                                            title="Copy Raw Transcript"
+                                        >
+                                            {copiedKey === "raw" ? (
+                                                <>
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                                                    <span style={{ color: "#10b981" }}>Copied</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+                                                    <span>Copy</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="transcript-body">
-                                    {rawTranscript ? (
-                                        <p className="transcript-text">{rawTranscript}</p>
-                                    ) : (
-                                        <div className="empty-state">No raw transcript generated yet.</div>
-                                    )}
+
+                                <div className="panel-content raw-content">
+                                    {rawTranscript.split("\n").map((para, i) => (
+                                        <p key={i}>{para}</p>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* REFINED TRANSCRIPT PANEL */}
+                        {/* Refined Transcript Card */}
                         {(transcriptView === "split" || transcriptView === "refined") && (
-                            <div className="transcript-card refined-card">
-                                <div className="transcript-card-header">
-                                    <div className="header-badge-group">
-                                        <span className="badge badge-refined">AI Refined Transcript</span>
+                            <div className="transcript-panel refined-panel">
+                                <div className="panel-header">
+                                    <div className="panel-header-left">
+                                        <span className="panel-badge refined-badge">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                                            AI-Refined Transcript
+                                        </span>
                                         <span className="word-count">{countWords(refinedTranscript)} words</span>
                                     </div>
-                                    <div style={{ display: "flex", gap: "6px" }}>
+                                    <div className="panel-header-right">
                                         <button
-                                            className="btn-action-icon"
-                                            title="Download refined transcript as text file"
-                                            onClick={handleDownloadRefinedTranscriptText}
-                                        >
-                                            ↓ Download .TXT
-                                        </button>
-                                        <button
-                                            className="btn-action-icon"
-                                            title="Copy refined transcript"
+                                            type="button"
+                                            className="btn-panel-action"
                                             onClick={() => copyToClipboard(refinedTranscript, "refined")}
+                                            title="Copy Refined Transcript"
                                         >
-                                            {copiedKey === "refined" ? "✓ Copied" : "Copy"}
+                                            {copiedKey === "refined" ? (
+                                                <>
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                                                    <span style={{ color: "#10b981" }}>Copied</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+                                                    <span>Copy</span>
+                                                </>
+                                            )}
                                         </button>
                                     </div>
                                 </div>
-                                <div className="transcript-body">
-                                    {refinedTranscript ? (
-                                        <p className="transcript-text refined-text">{refinedTranscript}</p>
-                                    ) : (
-                                        <div className="empty-state">No refined transcript generated yet.</div>
-                                    )}
+
+                                <div className="panel-content refined-content">
+                                    {refinedTranscript.split("\n").map((para, i) => (
+                                        <p key={i}>{para}</p>
+                                    ))}
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Action Footer Navigation */}
-                    <div className="page-actions-footer">
+                    {/* Bottom Link to Meeting Minutes */}
+                    <div className="transcripts-bottom-bar">
                         <button
                             type="button"
-                            className="btn-secondary"
-                            onClick={() => setTab("input")}
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="15 18 9 12 15 6" />
-                            </svg>
-                            <span>Back to Upload</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            className="btn-proceed"
+                            className="btn-next-step"
                             onClick={() => setTab("minutes")}
-                            disabled={!meetingRecord}
                         >
-                            <span>Proceed with Refined Transcript</span>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <span>View Meeting Minutes & Decisions</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="5" y1="12" x2="19" y2="12" />
                                 <polyline points="12 5 19 12 12 19" />
                             </svg>
@@ -533,251 +673,235 @@ export default function Meeting() {
             )}
 
             {/* ============================================================== */}
-            {/* STEP 3: MEETING MINUTES & TASKS TAB                            */}
+            {/* STEP 3: STRUCTURED MEETING MINUTES & ACTIONS                    */}
             {/* ============================================================== */}
             {tab === "minutes" && (
-                <div className="meeting-page-section">
-                    <div className="section-header-row">
-                        <div>
-                            <h2 className="section-title">Meeting Minutes & Action Items</h2>
-                            <p className="section-subtitle">
-                                Structured executive summary, confirmed decisions, and actionable assigned tasks.
-                            </p>
-                        </div>
-                        <div className="export-actions-group">
+                <div className="minutes-layout">
+                    {/* Navigation Bar */}
+                    <div className="minutes-navbar">
+                        <div className="nav-left">
                             <button
-                                className="btn-secondary-sm"
-                                title="Download Refined Transcript as .txt"
-                                onClick={handleDownloadRefinedTranscriptText}
+                                type="button"
+                                className="btn-back-link"
+                                onClick={() => setTab("transcripts")}
                             >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14 2 14 8 20 8" />
-                                    <line x1="16" y1="13" x2="8" y2="13" />
-                                    <line x1="16" y1="17" x2="8" y2="17" />
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="19" y1="12" x2="5" y2="12" />
+                                    <polyline points="12 19 5 12 12 5" />
                                 </svg>
-                                Download Refined Transcript (.txt)
+                                <span>Back to Transcripts</span>
                             </button>
+                            <div className="tab-pill-group">
+                                <button
+                                    type="button"
+                                    className="tab-pill"
+                                    onClick={() => setTab("transcripts")}
+                                >
+                                    Transcripts Comparison
+                                </button>
+                                <button
+                                    type="button"
+                                    className="tab-pill active"
+                                    onClick={() => setTab("minutes")}
+                                >
+                                    Meeting Minutes & Tasks
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="nav-right">
                             <button
-                                className="btn-secondary-sm"
-                                title="Download complete Meeting Minutes as .txt"
+                                type="button"
+                                className="btn-download-text primary"
                                 onClick={handleDownloadMeetingRecordText}
+                                title="Download Meeting Record & Minutes as .txt"
                             >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                                     <polyline points="7 10 12 15 17 10" />
                                     <line x1="12" y1="15" x2="12" y2="3" />
                                 </svg>
-                                Download Minutes (.txt)
-                            </button>
-                            <button
-                                className="btn-secondary-sm"
-                                onClick={() => copyToClipboard(JSON.stringify(meetingRecord, null, 2), "json")}
-                            >
-                                {copiedKey === "json" ? "✓ JSON Copied" : "Copy JSON"}
+                                <span>Export Complete Record (.txt)</span>
                             </button>
                         </div>
                     </div>
 
-                    {meetingRecord ? (
-                        <div className="minutes-layout">
-                            {/* Executive Summary Card */}
-                            <div className="doc-section-card summary-card">
-                                <div className="doc-section-header">
-                                    <div className="doc-header-title">
-                                        <div className="doc-icon-badge icon-summary">
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                                <polyline points="14 2 14 8 20 8" />
-                                                <line x1="16" y1="13" x2="8" y2="13" />
-                                                <line x1="16" y1="17" x2="8" y2="17" />
-                                                <polyline points="10 9 9 9 8 9" />
-                                            </svg>
-                                        </div>
-                                        <h3>Executive Summary</h3>
+                    {/* Executive Summary Card */}
+                    {meetingRecord?.summary && (
+                        <div className="minutes-section-card summary-card">
+                            <div className="section-card-header">
+                                <div className="section-title-group">
+                                    <div className="section-icon-badge purple">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14 2z" />
+                                            <polyline points="14 2 14 8 20 8" />
+                                            <line x1="16" y1="13" x2="8" y2="13" />
+                                            <line x1="16" y1="17" x2="8" y2="17" />
+                                        </svg>
                                     </div>
-                                    <button
-                                        className="btn-action-icon"
-                                        onClick={() => copyToClipboard(meetingRecord.summary, "sum")}
-                                    >
-                                        {copiedKey === "sum" ? "✓ Copied" : "Copy"}
-                                    </button>
+                                    <div>
+                                        <h3 className="section-heading">Executive Summary</h3>
+                                        <p className="section-subheading">High-level synthesis of key topics discussed</p>
+                                    </div>
                                 </div>
-                                <p className="summary-paragraph">{meetingRecord.summary || "No summary provided."}</p>
+                                <button
+                                    type="button"
+                                    className="btn-panel-action"
+                                    onClick={() => copyToClipboard(meetingRecord.summary, "summary")}
+                                >
+                                    {copiedKey === "summary" ? "Copied" : "Copy"}
+                                </button>
                             </div>
-
-                            {/* Key Decisions Card */}
-                            <div className="doc-section-card decisions-card">
-                                <div className="doc-section-header">
-                                    <div className="doc-header-title">
-                                        <div className="doc-icon-badge icon-decisions">
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                                <polyline points="22 4 12 14.01 9 11.01" />
-                                            </svg>
-                                        </div>
-                                        <h3>Key Confirmed Decisions</h3>
-                                        <span className="count-pill">{meetingRecord.decisions?.length || 0}</span>
-                                    </div>
-                                </div>
-                                {meetingRecord.decisions && meetingRecord.decisions.length > 0 ? (
-                                    <ul className="decisions-list">
-                                        {meetingRecord.decisions.map((decision, idx) => (
-                                            <li key={idx} className="decision-item">
-                                                <span className="decision-check-icon">✓</span>
-                                                <span className="decision-text">{decision}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p className="empty-text">No confirmed decisions recorded.</p>
-                                )}
+                            <div className="summary-body">
+                                <p>{meetingRecord.summary}</p>
                             </div>
-
-                            {/* Actionable Tasks Table Card */}
-                            <div className="doc-section-card tasks-card">
-                                <div className="doc-section-header">
-                                    <div className="doc-header-title">
-                                        <div className="doc-icon-badge icon-tasks">
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                                <line x1="16" y1="2" x2="16" y2="6" />
-                                                <line x1="8" y1="2" x2="8" y2="6" />
-                                                <line x1="3" y1="10" x2="21" y2="10" />
-                                            </svg>
-                                        </div>
-                                        <h3>Actionable Tasks & Work Items</h3>
-                                        <span className="count-pill">{meetingRecord.action_items?.length || 0}</span>
-                                    </div>
-                                </div>
-
-                                {meetingRecord.action_items && meetingRecord.action_items.length > 0 ? (
-                                    <div className="tasks-table-wrapper">
-                                        <table className="tasks-table">
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: "48px" }}>Status</th>
-                                                    <th>Work To Be Done</th>
-                                                    <th style={{ width: "180px" }}>Owner</th>
-                                                    <th style={{ width: "180px" }}>Deadline</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {meetingRecord.action_items.map((item, idx) => {
-                                                    const isDone = !!completedTasks[idx];
-                                                    const hasOwner = !isUnspecified(item.owner);
-                                                    const hasDeadline = !isUnspecified(item.deadline);
-
-                                                    return (
-                                                        <tr key={idx} className={isDone ? "task-row-done" : ""}>
-                                                            <td className="status-cell">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    className="task-checkbox"
-                                                                    checked={isDone}
-                                                                    onChange={() => toggleTaskCompleted(idx)}
-                                                                />
-                                                            </td>
-                                                            <td className="task-cell">
-                                                                <span className="task-description">{item.task}</span>
-                                                            </td>
-                                                            <td className="owner-cell">
-                                                                {hasOwner ? (
-                                                                    <div className="owner-tag">
-                                                                        <span className="owner-avatar">
-                                                                            {item.owner.charAt(0).toUpperCase()}
-                                                                        </span>
-                                                                        <span className="owner-name">{item.owner}</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="empty-value-cell">—</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="deadline-cell">
-                                                                {hasDeadline ? (
-                                                                    <span className="deadline-tag">
-                                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                            <circle cx="12" cy="12" r="10" />
-                                                                            <polyline points="12 6 12 12 16 14" />
-                                                                        </svg>
-                                                                        {item.deadline}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="empty-value-cell">—</span>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <p className="empty-text">No actionable tasks assigned in this meeting.</p>
-                                )}
-                            </div>
-
-                            {/* Meeting Minutes Discussion Points */}
-                            {meetingRecord.minutes && meetingRecord.minutes.length > 0 && (
-                                <div className="doc-section-card minutes-card">
-                                    <div className="doc-section-header">
-                                        <div className="doc-header-title">
-                                            <div className="doc-icon-badge icon-minutes">
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <line x1="8" y1="6" x2="21" y2="6" />
-                                                    <line x1="8" y1="12" x2="21" y2="12" />
-                                                    <line x1="8" y1="18" x2="21" y2="18" />
-                                                    <line x1="3" y1="6" x2="3.01" y2="6" />
-                                                    <line x1="3" y1="12" x2="3.01" y2="12" />
-                                                    <line x1="3" y1="18" x2="3.01" y2="18" />
-                                                </svg>
-                                            </div>
-                                            <h3>Discussion Minutes</h3>
-                                            <span className="count-pill">{meetingRecord.minutes.length}</span>
-                                        </div>
-                                    </div>
-                                    <ul className="minutes-list">
-                                        {meetingRecord.minutes.map((minute, idx) => (
-                                            <li key={idx} className="minute-item">
-                                                <span className="minute-bullet" />
-                                                <span className="minute-text">{minute}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="empty-state-card">
-                            <p>No meeting record available yet. Please complete processing your recording.</p>
                         </div>
                     )}
 
-                    {/* Bottom Footer Navigation */}
-                    <div className="page-actions-footer">
-                        <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => setTab("transcripts")}
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="15 18 9 12 15 6" />
-                            </svg>
-                            <span>Back to Transcripts</span>
-                        </button>
+                    {/* Confirmed Decisions Card */}
+                    {meetingRecord?.decisions && meetingRecord.decisions.length > 0 && (
+                        <div className="minutes-section-card decisions-card">
+                            <div className="section-card-header">
+                                <div className="section-title-group">
+                                    <div className="section-icon-badge green">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="section-heading">Confirmed Decisions</h3>
+                                        <p className="section-subheading">Approved agreements and final determinations</p>
+                                    </div>
+                                </div>
+                                <span className="count-pill green">{meetingRecord.decisions.length} decisions</span>
+                            </div>
+                            <div className="decisions-list">
+                                {meetingRecord.decisions.map((dec, idx) => (
+                                    <div key={idx} className="decision-item">
+                                        <div className="decision-check-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </div>
+                                        <span className="decision-text">{dec}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                        <button
-                            type="button"
-                            className="btn-proceed"
-                            onClick={handleResetAll}
-                        >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                <path d="M3 3v5h5" />
-                            </svg>
-                            <span>Process New Meeting</span>
-                        </button>
-                    </div>
+                    {/* Action Items Table */}
+                    {meetingRecord?.action_items && meetingRecord.action_items.length > 0 && (
+                        <div className="minutes-section-card tasks-card">
+                            <div className="section-card-header">
+                                <div className="section-title-group">
+                                    <div className="section-icon-badge blue">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect width="18" height="18" x="3" y="3" rx="2" />
+                                            <path d="m9 12 2 2 4-4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="section-heading">Action Items & Deliverables</h3>
+                                        <p className="section-subheading">Assigned tasks, ownership, and target milestones</p>
+                                    </div>
+                                </div>
+                                <span className="count-pill blue">{meetingRecord.action_items.length} tasks</span>
+                            </div>
+
+                            <div className="tasks-table-wrapper">
+                                <table className="tasks-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: "48px" }}>Status</th>
+                                            <th>Task Description</th>
+                                            <th style={{ width: "220px" }}>Assigned Owner</th>
+                                            <th style={{ width: "180px" }}>Target Deadline</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {meetingRecord.action_items.map((item, idx) => {
+                                            const isDone = completedTasks[idx];
+                                            const ownerUnspecified = isUnspecified(item.owner);
+                                            const deadlineUnspecified = isUnspecified(item.deadline);
+
+                                            return (
+                                                <tr key={idx} className={isDone ? "task-done" : ""}>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="task-checkbox"
+                                                            checked={!!isDone}
+                                                            onChange={() => toggleTaskCompleted(idx)}
+                                                            title="Toggle task completion"
+                                                        />
+                                                    </td>
+                                                    <td className="task-name-cell">
+                                                        <span className="task-title">{item.task}</span>
+                                                    </td>
+                                                    <td>
+                                                        {ownerUnspecified ? (
+                                                            <span className="empty-cell-dash">—</span>
+                                                        ) : (
+                                                            <div className="owner-chip">
+                                                                <span className="owner-avatar">
+                                                                    {item.owner.trim().charAt(0).toUpperCase()}
+                                                                </span>
+                                                                <span className="owner-name">{item.owner}</span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td>
+                                                        {deadlineUnspecified ? (
+                                                            <span className="empty-cell-dash">—</span>
+                                                        ) : (
+                                                            <div className="deadline-badge">
+                                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <circle cx="12" cy="12" r="10" />
+                                                                    <polyline points="12 6 12 12 16 14" />
+                                                                </svg>
+                                                                <span>{item.deadline}</span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Detailed Discussion Minutes */}
+                    {meetingRecord?.minutes && meetingRecord.minutes.length > 0 && (
+                        <div className="minutes-section-card discussion-card">
+                            <div className="section-card-header">
+                                <div className="section-title-group">
+                                    <div className="section-icon-badge orange">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="8" y1="6" x2="21" y2="6" />
+                                            <line x1="8" y1="12" x2="21" y2="12" />
+                                            <line x1="8" y1="18" x2="21" y2="18" />
+                                            <line x1="3" y1="6" x2="3.01" y2="6" />
+                                            <line x1="3" y1="12" x2="3.01" y2="12" />
+                                            <line x1="3" y1="18" x2="3.01" y2="18" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="section-heading">Discussion Points</h3>
+                                        <p className="section-subheading">Important notes and context from the discussion</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <ul className="minutes-bullets">
+                                {meetingRecord.minutes.map((m, i) => (
+                                    <li key={i}>{m}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

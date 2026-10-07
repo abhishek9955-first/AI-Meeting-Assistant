@@ -7,13 +7,51 @@ export default function Register() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [agreeTerms, setAgreeTerms] = useState(false)
-    const [viewPassword ,setViewPassword]=useState(false)
+    const [viewPassword, setViewPassword] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const [errorMsg, setErrorMsg] = useState('')
     const navigate = useNavigate()
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        // Navigate to dashboard
-        navigate('/')
+        if (!agreeTerms) {
+            setErrorMsg('Please accept the Terms of Service to continue.')
+            return
+        }
+
+        setErrorMsg('')
+        setLoading(true)
+
+        try {
+            const response = await fetch('http://localhost:8000/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: username.trim(),
+                    email: email.trim(),
+                    password: password
+                })
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.detail || data.message || 'Registration failed. Please try again.')
+            }
+
+            // Save registered user to localStorage
+            localStorage.setItem('user', JSON.stringify(data.user))
+            localStorage.setItem('accesstoken', data.access_token)
+
+            // Navigate to dashboard
+            navigate('/')
+        } catch (err) {
+            setErrorMsg(err.message || 'Unable to connect to server.')
+        } finally {
+            setLoading(false)
+        }
     }
 
     return (
@@ -34,6 +72,29 @@ export default function Register() {
                     <p className="auth-subtitle">Join AI Meeting Assistant to automatically transcribe & document meetings</p>
                 </div>
 
+                {/* Error Alert */}
+                {errorMsg && (
+                    <div style={{
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#EF4444',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        marginBottom: '18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>{errorMsg}</span>
+                    </div>
+                )}
+
                 {/* Register Form */}
                 <form className="auth-form" onSubmit={handleSubmit}>
                     {/* Username */}
@@ -50,7 +111,7 @@ export default function Register() {
                                 type="text"
                                 id="username"
                                 className="form-input"
-                                placeholder="MeetAI-user"
+                                placeholder="Alex Morgan"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
@@ -90,18 +151,20 @@ export default function Register() {
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                                 </svg>
                             </div>
-                            <div className="view-icon" onClick={() => { setViewPassword(!viewPassword) }} >
-                                {viewPassword ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                </svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-                                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-                                    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-                                    <line x1="2" y1="2" x2="22" y2="22" />
-                                </svg>
-
-                                }
+                            <div className="view-icon" onClick={() => setViewPassword(!viewPassword)}>
+                                {viewPassword ? (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                ) : (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                        <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                        <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                        <line x1="2" y1="2" x2="22" y2="22" />
+                                    </svg>
+                                )}
                             </div>
                             <input
                                 type={viewPassword ? 'text' : 'password'}
@@ -128,12 +191,16 @@ export default function Register() {
                     </label>
 
                     {/* Submit Button */}
-                    <button type="submit" className="btn-primary">
-                        <span>Create Account</span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                        </svg>
+                    <button type="submit" className="btn-primary" disabled={loading}>
+                        {loading ? <span>Creating Account...</span> : (
+                            <>
+                                <span>Create Account</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                    <polyline points="12 5 19 12 12 19" />
+                                </svg>
+                            </>
+                        )}
                     </button>
                 </form>
 

@@ -5,3 +5,9 @@ faster-whisper
 openai
 python-dotenv
 pydantic
+motor
+pymongo
+certifi
+opencv-python
+numpy
+
