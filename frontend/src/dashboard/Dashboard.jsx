@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 import Meeting from '../meeting/Meeting'
@@ -6,9 +6,12 @@ import Decode from '../decode/Decode'
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')
-  const navigate = useNavigate()
+  const navigate=useNavigate()
+  const user = JSON.parse(localStorage.getItem("user"))
 
   const handleLogout = () => {
+    localStorage.removeItem("user")
+    localStorage.removeItem("accesstoken")
     navigate('/login')
   }
 
@@ -82,10 +85,10 @@ export default function Dashboard() {
         {/* Sidebar Bottom (Profile & Logout) */}
         <div className="sidebar-bottom">
           <div className="profile-card">
-            <div className="profile-avatar">MA</div>
+            <div className="profile-avatar">{user.name[0].toUpperCase()}</div>
             <div className="profile-info">
-              <span className="profile-name">MeetAI User</span>
-              <span className="profile-email">user@meetai.com</span>
+              <span className="profile-name">{user.name}</span>
+              <span className="profile-email">{user.email}</span>
             </div>
           </div>
 

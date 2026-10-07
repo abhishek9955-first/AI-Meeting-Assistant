@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "./Decode.css";
-
+import { useNavigate } from "react-router-dom";
 export default function Decode() {
     const [selectedImage, setSelectedImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
@@ -12,7 +12,12 @@ export default function Decode() {
 
     const fileInputRef = useRef(null);
     const apiUrl = "http://localhost:8000";
-
+    const navigate = useNavigate()
+    useEffect(() => {
+        const accessToken = localStorage.getItem('accesstoken')
+        if (!accessToken)
+            navigate('/login')
+    }, [])
     const handleFile = (file) => {
         if (!file || !file.type.startsWith("image/")) return;
         
